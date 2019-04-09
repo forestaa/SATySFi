@@ -46,3 +46,6 @@ val is_text_mode : unit -> bool
 
 val set_extra_config_paths : string list -> unit
 val get_extra_config_paths : unit -> string list option
+
+val set_error_format_json : unit -> unit
+val error_format_json : unit -> bool
