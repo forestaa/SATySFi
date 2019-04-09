@@ -66,5 +66,5 @@ let to_json rng =
     ]
   in
   match rng with
-  | Dummy(msg) -> make_json "" 0 0 0 0
+  | Dummy(msg) -> make_json "dummy" 0 0 0 0
   | Normal(fname, ln1, pos1, ln2, pos2) -> make_json fname ln1 pos1 ln2 pos2
