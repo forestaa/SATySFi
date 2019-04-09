@@ -47,3 +47,24 @@ let make fname ln pos1 pos2 =
 
 let make_large fname ln1 pos1 ln2 pos2 =
   Normal(fname, ln1, pos1, ln2, pos2)
+
+
+let to_json rng = 
+  let make_json fname ln1 pos1 ln2 pos2 = 
+    `Assoc [
+      ("file", `String fname);
+      ("range", `Assoc [
+        ("start", `Assoc [
+          ("line", `Int ln1);
+          ("character", `Int pos1)
+        ]);
+        ("end", `Assoc [
+          ("line", `Int ln2);
+          ("character", `Int pos2)
+        ])
+      ])
+    ]
+  in
+  match rng with
+  | Dummy(msg) -> make_json "" 0 0 0 0
+  | Normal(fname, ln1, pos1, ln2, pos2) -> make_json fname ln1 pos1 ln2 pos2

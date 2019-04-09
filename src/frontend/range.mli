@@ -15,3 +15,5 @@ val unite : t -> t -> t
 val make : string -> int -> int -> int -> t
 
 val make_large : string -> int -> int -> int -> int -> t
+
+val to_json : t -> Yojson.Basic.json
