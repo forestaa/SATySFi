@@ -1,0 +1,11 @@
+{
+  "file": "contradictionerror2.satyh",
+  "range": {
+    "start": { "line": 1, "character": 15 },
+    "end": { "line": 1, "character": 16 }
+  },
+  "message":
+    "! [Type Error] this expression has type\n
+   'a -> 'a,\n    but is expected of type\n
+int?-> ...?-> 'a -> 'b.\n    This constraint is required by the expression\n    at \"contradictionerror2.satyh\", line 1, characters 15-16."
+}

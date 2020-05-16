@@ -1,0 +1,12 @@
+@require: stdjareport
+@import: stage
+
+let x = ~(&(1 + 2 * 2))
+let f ?:x y = y
+let-inline \show-int n = embed-string (arabic n) in
+
+document (|
+  title = {Staged Computation \show-int(x);};
+  author = {SATySFi};
+|) '<
+>

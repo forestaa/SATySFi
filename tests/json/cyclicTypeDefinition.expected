@@ -1,0 +1,9 @@
+{
+  "file": "cyclicTypeDefinition.satyh",
+  "range": {
+    "start": { "line": 1, "character": 5 },
+    "end": { "line": 2, "character": 6 }
+  },
+  "message":
+    "! [Type Error] cyclic synonym type definition:\n      b (at \"cyclicTypeDefinition.satyh\", line 2, characters 5-6)\n      a (at \"cyclicTypeDefinition.satyh\", line 1, characters 5-6)"
+}

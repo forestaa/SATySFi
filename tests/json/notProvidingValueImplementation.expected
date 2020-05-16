@@ -1,0 +1,9 @@
+{
+  "file": "notProvidingValueImplementation.satyh",
+  "range": {
+    "start": { "line": 1, "character": 0 },
+    "end": { "line": 4, "character": 3 }
+  },
+  "message":
+    "! [Type Error] The implementation does not provide value 'x',\n    which is required by the signature."
+}

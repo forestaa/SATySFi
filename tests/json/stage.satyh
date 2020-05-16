@@ -1,0 +1,2 @@
+let f: string? -> int -> int = fun y -> (fun x -> y + x)
+let z: string = 1

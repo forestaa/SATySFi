@@ -1,0 +1,3 @@
+@import: cyclicfiledependency
+
+let x = 1

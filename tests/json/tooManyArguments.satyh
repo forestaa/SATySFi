@@ -1,0 +1,1 @@
+let-math \f = ${2} in ${\f{hoge}}

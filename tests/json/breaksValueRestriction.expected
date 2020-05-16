@@ -1,0 +1,9 @@
+{
+  "file": "breaksvaluerestriction.satyh",
+  "range": {
+    "start": { "line": 1, "character": 12 },
+    "end": { "line": 1, "character": 13 }
+  },
+  "message":
+    "! [Type Error] this expression breaks the value restriction;\n    it should be a syntactic function."
+}
