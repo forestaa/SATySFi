@@ -641,12 +641,8 @@ let error_log_environment suspended report_error =
         NormalLine(s);
       ]
 
-  | Parsing.Parse_error -> report_error (Range.dummy "") Parser [ NormalLine("something is wrong."); ]
-  | ParseErrorDetail(s) -> report_error (Range.dummy "") Parser [ NormalLine(s); ]
-
   | IllegalArgumentLength(rng, len, lenexp) ->
-      report_error Parser [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Parser [
         NormalLine("this declaration has " ^ (string_of_int len) ^ " argument pattern(s),");
         NormalLine("but is expected to have " ^ (string_of_int lenexp) ^ ".");
       ]
@@ -656,8 +652,7 @@ let error_log_environment suspended report_error =
       ]
 
   | ParseErrorDetail(rng, s) ->
-      report_error Parser [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Parser [
         NormalLine(s)
       ]
 
@@ -713,20 +708,17 @@ let error_log_environment suspended report_error =
       ]
 
   | Typechecker.UndefinedHorzMacro(rng, csnm) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("undefined inline macro '" ^ csnm ^ "'.");
       ]
 
   | Typechecker.UndefinedVertMacro(rng, csnm) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("undefined block macro '" ^ csnm ^ "'.");
       ]
 
   | Typechecker.InvalidNumberOfMacroArguments(rng, tyenv, macparamtys) ->
-      report_error Typechecker (List.append [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker (List.append [
         NormalLine("invalid number of macro arguments; types expected on arguments are:");
       ] (macparamtys |> List.map (function
         | LateMacroParameter(ty)  -> DisplayLine("* " ^ (Display.string_of_mono_type tyenv ty))
@@ -734,16 +726,14 @@ let error_log_environment suspended report_error =
       )))
 
   | Typechecker.LateMacroArgumentExpected(rng, tyenv, ty) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("an early macro argument is given, but a late argument of type");
         DisplayLine(Display.string_of_mono_type tyenv ty);
         NormalLine("is expected.");
       ]
 
   | Typechecker.EarlyMacroArgumentExpected(rng, tyenv, ty) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("a late macro argument is given, but an early argument of type");
         DisplayLine(Display.string_of_mono_type tyenv ty);
         NormalLine("is expected.");
