@@ -74,7 +74,7 @@ let report_error_json (rng : Range.t) (cat : error_category) (lines : line list)
 
 
 let report_error_stdout (rng : Range.t) (cat : error_category) (lines : line list) =
-  if (OptionState.error_format_json ())
+  if (OptionState.message_format_json ())
     then
       let json = report_error_json rng cat lines in
       Yojson.Basic.pretty_to_channel stdout json;
@@ -233,7 +233,7 @@ let register_document_file (dg : file_info FileDependencyGraph.t) (abspath_in : 
   Logging.begin_to_parse_file abspath_in;
   let file_in = open_in_abs abspath_in in
   let curdir = Filename.dirname (get_abs_path_string abspath_in) in
-  let fname = if OptionState.error_format_json () then get_abs_path_string abspath_in else Filename.basename (get_abs_path_string abspath_in) in
+  let fname = if OptionState.message_format_json () then get_abs_path_string abspath_in else Filename.basename (get_abs_path_string abspath_in) in
   let (stage, header, utast) = ParserInterface.process fname (Lexing.from_channel file_in) in
   begin
     match stage with
@@ -991,7 +991,7 @@ let arg_spec_list curdir =
     ("--show-fonts"      , Arg.Unit(OptionState.set_show_fonts)      , " Displays all the available fonts"                      );
     ("-C"                , Arg.String(arg_config)                    , " Add colon-separated paths to configuration search path");
     ("--config"          , Arg.String(arg_config)                    , " Add colon-separated paths to configuration search path");
-    ("--error-format-json", Arg.Unit(OptionState.set_error_format_json) , " JSON ");
+    ("--message-format-json", Arg.Unit(OptionState.set_message_format_json) , " JSON ");
   ]
 
 
