@@ -1,0 +1,10 @@
+{
+  "file": "multipleTypeDefinition.satyh",
+  "range": {
+    "start": { "line": 1, "character": 5 },
+    "end": { "line": 2, "character": 6 }
+  },
+  "message":
+    "! [Type Error] parallel type definition by the same name:\n      a (at \"multipleTypeDefinition.satyh\", line 1, characters 5-6)\n      a (at
+\"multipleTypeDefinition.satyh\", line 2, characters 5-6)"
+}

@@ -1,0 +1,11 @@
+{
+  "file": "",
+  "range": {
+    "start": { "line": 0, "character": 0 },
+    "end": { "line": 0, "character": 0 }
+  },
+  "message":
+    "! [Error] package file not found:\n      notfound\n    candidate paths:\n      /mnt/c/Users/tdaic/build/SATySFi/.satysfi/local/packages/notfound.satyh\n      /mnt/c/Users/tdaic/build/SATySFi/.satysfi/local/packages/notfound.satyg\n      /home/foresta/.satysfi/local/packages/notfound.satyh\n      /home/foresta/.satysfi/local/packages/notfound.satyg\n      /usr/local/share/satysfi/local/packages/notfound.satyh\n
+ /usr/local/share/satysfi/local/packages/notfound.satyg\n      /usr/share/satysfi/local/packages/notfound.satyh\n      /usr/share/satysfi/local/packages/notfound.satyg\n      /mnt/c/Users/tdaic/build/SATySFi/.satysfi/dist/packages/notfound.satyh\n      /mnt/c/Users/tdaic/build/SATySFi/.satysfi/dist/packages/notfound.satyg\n
+  /home/foresta/.satysfi/dist/packages/notfound.satyh\n      /home/foresta/.satysfi/dist/packages/notfound.satyg\n      /usr/local/share/satysfi/dist/packages/notfound.satyh\n      /usr/local/share/satysfi/dist/packages/notfound.satyg\n      /usr/share/satysfi/dist/packages/notfound.satyh\n      /usr/share/satysfi/dist/packages/notfound.satyg"
+}

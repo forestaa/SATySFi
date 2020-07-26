@@ -1,0 +1,4 @@
+module X : sig
+  type x
+end = struct
+end

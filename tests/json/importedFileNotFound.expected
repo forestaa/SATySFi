@@ -1,0 +1,10 @@
+{
+  "file": "",
+  "range": {
+    "start": { "line": 0, "character": 0 },
+    "end": { "line": 0, "character": 0 }
+  },
+  "message":
+    "! [Error] imported file not found:\n
+notfound\n    candidate paths:\n      /mnt/c/Users/tdaic/build/SATySFi/tests/json/notfound.satyh\n      /mnt/c/Users/tdaic/build/SATySFi/tests/json/notfound.satyg"
+}

@@ -1,0 +1,8 @@
+{
+  "file": "undefinedvariable.satyh",
+  "range": {
+    "start": { "line": 1, "character": 8 },
+    "end": { "line": 1, "character": 9 }
+  },
+  "message": "! [Type Error] undefined variable 'f'."
+}

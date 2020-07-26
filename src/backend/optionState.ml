@@ -19,6 +19,7 @@ type state = {
   mutable debug_show_block_space : bool;
   mutable mode             : (string list) option;
   mutable extra_config_paths : string list option;
+  mutable message_format_json : bool;
 }
 
 
@@ -36,6 +37,7 @@ let state = {
   debug_show_block_space = false;
   mode             = None;
   extra_config_paths = None;
+  message_format_json = false;
 }
 
 let set_input_kind ikd = state.input_kind <- ikd
@@ -85,3 +87,6 @@ let is_text_mode () =
 
 let set_extra_config_paths lst = state.extra_config_paths <- Some(lst)
 let get_extra_config_paths () = state.extra_config_paths
+
+let set_message_format_json () = state.message_format_json <- true
+let message_format_json () = state.message_format_json

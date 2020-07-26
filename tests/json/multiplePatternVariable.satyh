@@ -1,0 +1,2 @@
+let m = match (1, 2) with
+  | (m, m) -> 0

@@ -1,0 +1,9 @@
+{
+  "file": "undefinedtypename.satyh",
+  "range": {
+    "start": { "line": 1, "character": 9 },
+    "end": { "line": 1, "character": 10 }
+  },
+  "message": "! [Type Error] undefined type name
+'a'"
+}

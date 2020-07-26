@@ -40,34 +40,50 @@ let show_error_category = function
   | System      -> "Error"
 
 
-let report_error (cat : error_category) (lines : line list) =
-  let aux lst =
-    lst |> List.fold_left (fun is_first line ->
-      begin
+let make_error_message (cat : error_category) (lines : line list) =
+  let rec concat lst =
+    List.fold_right (fun line acc ->
         match line with
         | NormalLine(s)
-        | NormalLineOption(Some(s)) ->
-            if is_first then
-              print_endline s
-            else
-              print_endline ("    " ^ s)
+        | NormalLineOption(Some(s)) -> ("    " ^ s) :: acc
 
         | DisplayLine(s)
-        | DisplayLineOption(Some(s)) ->
-            if is_first then
-              print_endline ("\n      " ^ s)
-            else
-              print_endline ("      " ^ s)
+        | DisplayLineOption(Some(s)) -> ("      " ^ s) :: acc
 
-        | _ ->
-            ()
-      end;
-      false
-    ) true
+        | _ -> acc
+    ) lst []
   in
-  print_string ("! [" ^ (show_error_category cat) ^ "] ");
-  aux lines |> ignore;
-  exit 1
+  let msglst =
+    match lines with
+    | [] -> []
+
+    | NormalLine(s)::rest
+    | NormalLineOption(Some(s))::rest -> ("! [" ^ (show_error_category cat) ^ "] " ^ s) :: concat rest
+
+    | DisplayLine(s)::rest
+    | DisplayLineOption(Some(s))::rest -> ("! [" ^ (show_error_category cat) ^ "] ") :: ("      " ^ s) :: concat rest
+
+    | _::rest -> concat rest
+  in
+  String.concat "\n" msglst
+
+
+let report_error_json (rng : Range.t) (cat : error_category) (lines : line list) =
+    let msg = make_error_message cat lines in
+    Yojson.Basic.Util.combine (Range.to_json rng) (`Assoc [("message", `String msg)])
+
+
+let report_error_stdout (rng : Range.t) (cat : error_category) (lines : line list) =
+  if (OptionState.message_format_json ())
+    then
+      let json = report_error_json rng cat lines in
+      Yojson.Basic.pretty_to_channel stdout json;
+      exit 1
+    else
+      let lines' = (if Range.is_dummy rng then NormalLine("cannot report error position; " ^ Range.message rng) else NormalLine("at " ^ (Range.to_string rng) ^ ":")) :: lines in
+      let msg = make_error_message cat lines' in
+      print_string msg;
+      exit 1
 
 
 let make_candidates_message (candidates : string list) =
@@ -217,7 +233,8 @@ let register_document_file (dg : file_info FileDependencyGraph.t) (abspath_in : 
   Logging.begin_to_parse_file abspath_in;
   let file_in = open_in_abs abspath_in in
   let curdir = Filename.dirname (get_abs_path_string abspath_in) in
-  let (stage, header, utast) = ParserInterface.process (Filename.basename (get_abs_path_string abspath_in)) (Lexing.from_channel file_in) in
+  let fname = if OptionState.message_format_json () then get_abs_path_string abspath_in else Filename.basename (get_abs_path_string abspath_in) in
+  let (stage, header, utast) = ParserInterface.process fname (Lexing.from_channel file_in) in
   begin
     match stage with
     | Stage1               -> ()
@@ -439,49 +456,49 @@ let convert_abs_path_to_show abspath =
     Filename.basename abspathstr
 
 
-let error_log_environment suspended =
+let error_log_environment suspended report_error =
   try
     suspended ()
   with
   | RemainsToBeImplemented(msg) ->
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("remains to be supported:");
         DisplayLine(msg);
       ]
 
   | NoLibraryRootDesignation ->
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("cannot determine where the SATySFi library root is;");
         NormalLine("set appropriate environment variables.");
       ]
 
   | NoInputFileDesignation ->
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("no input file designation.");
       ]
 
   | CyclicFileDependency(cycle) ->
-      report_error Interface (
+      report_error (Range.dummy "") Interface (
         (NormalLine("cyclic dependency detected:")) ::
         (cycle |> List.map (fun abspath -> DisplayLine(get_abs_path_string abspath)))
       )
 
   | Config.PackageNotFound(package, pathcands) ->
-      report_error Interface (List.append [
+      report_error (Range.dummy "") Interface (List.append [
         NormalLine("package file not found:");
         DisplayLine(package);
         NormalLine("candidate paths:");
       ] (pathcands |> List.map (fun abspath -> DisplayLine(get_abs_path_string abspath))))
 
   | Config.LibraryFileNotFound(relpath, pathcands) ->
-      report_error Interface (List.append [
+      report_error (Range.dummy "") Interface (List.append [
         NormalLine("library file not found:");
         DisplayLine(get_lib_path_string relpath);
         NormalLine("candidate paths:");
       ] (pathcands |> List.map (fun abspath -> DisplayLine(get_abs_path_string abspath))))
 
   | Config.LibraryFilesNotFound(relpaths, pathcands) ->
-      report_error Interface (List.concat [
+      report_error (Range.dummy "") Interface (List.concat [
         [ NormalLine("any of the following library file(s) not found:"); ];
         relpaths |> List.map (fun relpath -> DisplayLine(get_lib_path_string relpath));
         [ NormalLine("candidate paths:"); ];
@@ -489,7 +506,7 @@ let error_log_environment suspended =
       ])
 
   | Config.ImportedFileNotFound(s, pathcands) ->
-      report_error Interface (List.append [
+      report_error (Range.dummy "") Interface (List.append [
         NormalLine("imported file not found:");
         DisplayLine(s);
         NormalLine("candidate paths:");
@@ -497,88 +514,87 @@ let error_log_environment suspended =
 
   | NotALibraryFile(abspath, tyenv, ty) ->
       let fname = convert_abs_path_to_show abspath in
-      report_error Typechecker [
+      report_error (Range.make fname 0 0 0) Typechecker [
         NormalLine("file '" ^ fname ^ "' is not a header file; it is of type");
         DisplayLine(string_of_mono_type tyenv ty);
       ]
 
   | NotADocumentFile(abspath_in, tyenv, ty) ->
       let fname = convert_abs_path_to_show abspath_in in
-      report_error Typechecker [
+      report_error (Range.make fname 0 0 0) Typechecker [
         NormalLine("file '" ^ fname ^ "' is not a document file; it is of type");
         DisplayLine(string_of_mono_type tyenv ty);
       ]
 
   | NotAStringFile(abspath_in, tyenv, ty) ->
       let fname = convert_abs_path_to_show abspath_in in
-      report_error Typechecker [
+      report_error (Range.make fname 0 0 0) Typechecker [
         NormalLine("file '" ^ fname ^ "' is not a file for generating text; it is of type");
         DisplayLine(string_of_mono_type tyenv ty);
       ]
 
   | ShouldSpecifyOutputFile ->
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("should specify output file for text mode.");
       ]
 
   | DocumentShouldBeAtStage1 ->
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("invalid stage designation for a document file; should be at stage 1.");
       ]
 
   | InvalidDependencyAsToStaging(abspath1, stage1, abspath2, stage2) ->
       let fname1 = convert_abs_path_to_show abspath1 in
       let fname2 = convert_abs_path_to_show abspath2 in
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("invalid dependency as to stage:");
         NormalLine("'" ^ fname1 ^ "' (at " ^ (string_of_stage stage1) ^ ") depends on '" ^ fname2 ^ "' (at " ^ (string_of_stage stage2) ^ ")");
       ]
 
   | CannotReadFileOwingToSystem(msg) ->
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("cannot read file:");
         DisplayLine(msg);
       ]
 
   | LoadHyph.InvalidPatternElement(rng) ->
-      report_error System [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng System [
         NormalLine("invalid string for hyphenation pattern.");
       ]
 
   | FontFormat.FailToLoadFontOwingToSystem(abspath, msg) ->
       let fname = convert_abs_path_to_show abspath in
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("cannot load font file '" ^ fname ^ "';");
         DisplayLine(msg);
       ]
 
   | FontFormat.BrokenFont(abspath, msg) ->
       let fname = convert_abs_path_to_show abspath in
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("font file '" ^ fname ^ "' is broken;");
         DisplayLine(msg);
       ]
 
   | FontFormat.CannotFindUnicodeCmap(abspath) ->
       let fname = convert_abs_path_to_show abspath in
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("font file '" ^ fname ^ "' does not have 'cmap' subtable for Unicode code points.");
       ]
 
   | FontInfo.InvalidFontAbbrev(abbrev) ->
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine ("cannot find a font named '" ^ abbrev ^ "'.");
       ]
 
   | FontInfo.InvalidMathFontAbbrev(mfabbrev) ->
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("cannot find a math font named '" ^ mfabbrev ^ "'.");
       ]
 
   | FontInfo.NotASingleFont(abbrev, abspath) ->
       let fname = convert_abs_path_to_show abspath in
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("the font file '" ^ fname ^ "',");
         NormalLine("which is associated with the font name '" ^ abbrev ^ "',");
         NormalLine("is not a single font file; it is a TrueType collection.");
@@ -586,7 +602,7 @@ let error_log_environment suspended =
 
   | FontInfo.NotASingleMathFont(mfabbrev, abspath) ->
       let fname = convert_abs_path_to_show abspath in
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("the font file '" ^ fname ^ "',");
         NormalLine("which is associated with the math font name '" ^ mfabbrev ^ "',");
         NormalLine("is not a single font file; it is a TrueType collection.");
@@ -594,129 +610,116 @@ let error_log_environment suspended =
 
   | ImageHashTable.CannotLoadPdf(msg, abspath, pageno) ->
       let fname = convert_abs_path_to_show abspath in
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("cannot load PDF file '" ^ fname ^ "' page #" ^ (string_of_int pageno) ^ ";");
         DisplayLine(msg);
       ]
 
   | ImageHashTable.CannotLoadImage(msg, abspath) ->
       let fname = convert_abs_path_to_show abspath in
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("cannot load image file '" ^ fname ^ "';");
         DisplayLine(msg);
       ]
 
   | ImageHashTable.ImageOfWrongFileType(abspath) ->
       let fname = convert_abs_path_to_show abspath in
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("cannot load image file '" ^ fname ^ "';");
         DisplayLine("This file format is not supported.");
       ]
 
   | ImageHashTable.UnsupportedColorModel(_, abspath) ->
       let fname = convert_abs_path_to_show abspath in
-      report_error Interface [
+      report_error (Range.dummy "") Interface [
         NormalLine("cannot load image file '" ^ fname ^ "';");
         DisplayLine("This color model is not supported.");
       ]
 
+
   | Lexer.LexError(rng, s) ->
-      report_error Lexer [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Lexer [
         NormalLine(s);
       ]
 
   | IllegalArgumentLength(rng, len, lenexp) ->
-      report_error Parser [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Parser [
         NormalLine("this declaration has " ^ (string_of_int len) ^ " argument pattern(s),");
         NormalLine("but is expected to have " ^ (string_of_int lenexp) ^ ".");
       ]
 
   | ParserInterface.Error(rng) ->
-      report_error Parser [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Parser [
       ]
 
   | ParseErrorDetail(rng, s) ->
-      report_error Parser [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Parser [
         NormalLine(s)
       ]
 
   | LoadMDSetting.MultipleCodeNameDesignation(rng, s) ->
-      report_error System [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng System [
         NormalLine("multiple designation for key '" ^ s ^ "'.");
       ]
 
   | LoadMDSetting.NotAnInlineCommand(rng, s) ->
-      report_error System [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng System [
         NormalLine("'" ^ s ^ "' is not an inline command name.");
       ]
 
   | LoadMDSetting.NotABlockCommand(rng, s) ->
-      report_error System [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng System [
         NormalLine("'" ^ s ^ "' is not a block command name.");
       ]
 
   | MyYojsonUtil.SyntaxError(fname, msg) ->
-      report_error System [
+      report_error (Range.make fname 0 0 0) System [
         NormalLine("in '" ^ fname ^ "':");
         NormalLine(msg);
       ]
 
   | MyYojsonUtil.MultipleDesignation(rng, key) ->
-      report_error System [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng System [
         NormalLine("multiple designation for key \"" ^ key ^ "\".");
       ]
 
   | Yojson.SafePos.Util.Type_error(msg, (pos, _)) ->
       let rng = MyYojsonUtil.make_range pos in
-      report_error System [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng System [
         NormalLine(msg);
       ]
 
   | MyYojsonUtil.MissingRequiredKey(rng, key) ->
-      report_error System [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng System [
         NormalLine("missing required key '" ^ key ^ "'.");
       ]
 
   | Typechecker.UndefinedVariable(rng, mdlnmlst, varnm, candidates) ->
       let s = String.concat "." (List.append mdlnmlst [varnm]) in
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("undefined variable '" ^ s ^ "'.");
         NormalLineOption(make_candidates_message candidates);
       ]
 
+
   | Typechecker.UndefinedConstructor(rng, constrnm, candidates) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("undefined constructor '" ^ constrnm ^ "'.");
         NormalLineOption(make_candidates_message candidates);
       ]
 
   | Typechecker.UndefinedHorzMacro(rng, csnm) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("undefined inline macro '" ^ csnm ^ "'.");
       ]
 
   | Typechecker.UndefinedVertMacro(rng, csnm) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("undefined block macro '" ^ csnm ^ "'.");
       ]
 
   | Typechecker.InvalidNumberOfMacroArguments(rng, tyenv, macparamtys) ->
-      report_error Typechecker (List.append [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker (List.append [
         NormalLine("invalid number of macro arguments; types expected on arguments are:");
       ] (macparamtys |> List.map (function
         | LateMacroParameter(ty)  -> DisplayLine("* " ^ (Display.string_of_mono_type tyenv ty))
@@ -724,168 +727,147 @@ let error_log_environment suspended =
       )))
 
   | Typechecker.LateMacroArgumentExpected(rng, tyenv, ty) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("an early macro argument is given, but a late argument of type");
         DisplayLine(Display.string_of_mono_type tyenv ty);
         NormalLine("is expected.");
       ]
 
   | Typechecker.EarlyMacroArgumentExpected(rng, tyenv, ty) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("a late macro argument is given, but an early argument of type");
         DisplayLine(Display.string_of_mono_type tyenv ty);
         NormalLine("is expected.");
       ]
 
   | Typechecker.TooManyArgument(rngcmdapp, tyenv, tycmd) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rngcmdapp) ^ ":");
+      report_error rngcmdapp Typechecker [
         NormalLine("too many argument(s);");
         NormalLine("the command has type");
         DisplayLine((Display.string_of_mono_type tyenv tycmd) ^ ".")
       ]
 
   | Typechecker.NeedsMoreArgument(rngcmdapp, tyenv, tycmd, tyreq) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rngcmdapp) ^ ":");
-        NormalLine("needs more mandatory argument(s);");
-        NormalLine("the command has type");
-        DisplayLine((Display.string_of_mono_type tyenv tycmd) ^ ",");
-        NormalLine("and another argument of type");
-        DisplayLine(Display.string_of_mono_type tyenv tyreq);
-        NormalLine("is needed.");
-      ]
+    report_error rngcmdapp Typechecker [
+      NormalLine("needs more mandatory argument(s);");
+      NormalLine("the command has type");
+      DisplayLine((Display.string_of_mono_type tyenv tycmd) ^ ",");
+      NormalLine("and another argument of type");
+      DisplayLine(Display.string_of_mono_type tyenv tyreq);
+      NormalLine("is needed.");
+    ]
 
   | Typechecker.InvalidOptionalCommandArgument(tyenv, tycmd, rngarg) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rngarg) ^ ":");
+      report_error rngarg Typechecker [
         NormalLine("invalid application of an optional argument;");
         NormalLine("the command has type");
         DisplayLine((Display.string_of_mono_type tyenv tycmd) ^ ".");
       ]
 
   | Typechecker.UnknownUnitOfLength(rng, unitnm) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("undefined unit of length '" ^ unitnm ^ "'.");
       ]
 
   | Typechecker.HorzCommandInMath(rng) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("an inline command is used as a math command.");
       ]
 
   | Typechecker.MathCommandInHorz(rng) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("a math command is used as an inline command.");
       ]
 
   | Typechecker.BreaksValueRestriction(rng) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("this expression breaks the value restriction;");
         NormalLine("it should be a syntactic function.");
       ]
 
   | Typechecker.MultiplePatternVariable(rng1, rng2, varnm) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng1));
-        NormalLine("and at " ^ (Range.to_string rng2) ^ ":");
+      report_error (Range.unite rng1 rng2) Typechecker [
         NormalLine("pattern variable '" ^ varnm ^ "' is bound more than once.");
       ]
 
   | Typechecker.MultipleFieldInRecord(rng, fldnm) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("this record expression has more than one field for '" ^ fldnm ^ "'.");
       ]
 
   | Typechecker.InvalidExpressionAsToStaging(rng, stage) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("invalid expression as to stage;");
         NormalLine("should be used at " ^ (string_of_stage stage) ^ ".");
       ]
 
   | Typechecker.InvalidOccurrenceAsToStaging(rng, varnm, stage) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("invalid occurrence of variable '" ^ varnm ^ "' as to stage;");
         NormalLine("should be used at " ^ (string_of_stage stage) ^ ".");
       ]
 
   | Typechecker.ApplicationOfNonFunction(rng, tyenv, ty) ->
       let strty = string_of_mono_type tyenv ty in
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("this expression has type");
         DisplayLine(strty);
         NormalLine("and thus it cannot be applied to arguments.");
       ]
 
   | Typeenv.IllegalNumberOfTypeArguments(rng, tynm, lenexp, lenerr) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("'" ^ tynm ^ "' is expected to have " ^ (string_of_int lenexp) ^ " type argument(s),");
         NormalLine("but it has " ^ (string_of_int lenerr) ^ " type argument(s) here.");
       ]
 
   | Typeenv.UndefinedTypeName(rng, mdlnmlst, tynm, candidates) ->
       let s = String.concat "." (List.append mdlnmlst [tynm]) in
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("undefined type name '" ^ s ^ "'");
         NormalLineOption(make_candidates_message candidates);
       ]
 
   | Typeenv.UndefinedModuleName(rng, mdlnm, candidates) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("undefined module name '" ^ mdlnm ^ "'");
         NormalLineOption(make_candidates_message candidates);
       ]
 
   | Typeenv.UndefinedTypeArgument(rng, tyargnm, candidates) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("undefined type argument '" ^ tyargnm ^ "'");
         NormalLineOption(make_candidates_message candidates);
       ]
 
   | Typeenv.CyclicTypeDefinition(reslist) ->
-      report_error Typechecker (
+    let rng = List.fold_left (fun acc (rng, _) -> Range.unite rng acc) (Range.dummy "") reslist in
+      report_error rng Typechecker (
         (NormalLine("cyclic synonym type definition:"))
         :: (List.map (fun (rng, strty) -> DisplayLine(strty ^ " (at " ^ (Range.to_string rng) ^ ")")) reslist)
       )
 
   | Typeenv.MultipleTypeDefinition(rng1, rng2, tynm) ->
-      report_error Typechecker [
+      report_error (Range.unite rng1 rng2) Typechecker [
         NormalLine("parallel type definition by the same name:");
         DisplayLine(tynm ^ " (at " ^ (Range.to_string rng1) ^ ")");
         DisplayLine(tynm ^ " (at " ^ (Range.to_string rng2) ^ ")");
       ]
 
   | Typeenv.NotProvidingTypeImplementation(rng, tynm) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("The implementation does not provide type '" ^ tynm ^ "',");
         NormalLine("which is required by the signature.");
       ]
 
   | Typeenv.NotProvidingValueImplementation(rng, varnm) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("The implementation does not provide value '" ^ varnm ^ "',");
         NormalLine("which is required by the signature.");
       ]
 
   | Typeenv.NotMatchingInterface(rng, varnm, tyenv1, pty1, tyenv2, pty2) ->
-      report_error Typechecker [
-        NormalLine("at " ^ (Range.to_string rng) ^ ":");
+      report_error rng Typechecker [
         NormalLine("The implementation of value '" ^ varnm ^ "' has type");
         DisplayLine(Display.string_of_poly_type tyenv1 pty1);
         NormalLine("which is inconsistent with the type required by the signature");
@@ -895,18 +877,15 @@ let error_log_environment suspended =
   | Typechecker.ContradictionError(tyenv, ((rng1, _) as ty1), ((rng2, _) as ty2)) ->
       let strty1 = string_of_mono_type tyenv ty1 in
       let strty2 = string_of_mono_type tyenv ty2 in
-      let strrng1 = Range.to_string rng1 in
-      let strrng2 = Range.to_string rng2 in
-      let (posmsg, strtyA, strtyB, additional) =
+      let (rng, strtyA, strtyB, additional) =
         match (Range.is_dummy rng1, Range.is_dummy rng2) with
-        | (true, true)   -> ("(cannot report position; '" ^ (Range.message rng1) ^ "', '" ^ (Range.message rng2) ^ "')", strty1, strty2, [])
-        | (true, false)  -> ("at " ^ strrng2 ^ ":", strty2, strty1, [])
-        | (false, true)  -> ("at " ^ strrng1 ^ ":", strty1, strty2, [])
-        | (false, false) -> ("at " ^ strrng1 ^ ":", strty1, strty2, [ NormalLine("This constraint is required by the expression");
-                                                                      NormalLine("at " ^ strrng2 ^ "."); ])
+        | (true, true)   -> (Range.dummy(Range.message rng1 ^ ", " ^ Range.message rng2), strty1, strty2, [])
+        | (true, false)  -> (rng2, strty2, strty1, [])
+        | (false, true)  -> (rng1, strty1, strty2, [])
+        | (false, false) -> (rng1, strty1, strty2, [ NormalLine("This constraint is required by the expression");
+                                                                      NormalLine("at " ^ Range.to_string rng2 ^ "."); ])
       in
-        report_error Typechecker (List.append [
-          NormalLine(posmsg);
+        report_error rng Typechecker (List.append [
           NormalLine("this expression has type");
           DisplayLine(strtyA ^ ",");
           NormalLine("but is expected of type");
@@ -916,18 +895,15 @@ let error_log_environment suspended =
   | Typechecker.InclusionError(tyenv, ((rng1, _) as ty1), ((rng2, _) as ty2)) ->
       let strty1 = string_of_mono_type tyenv ty1 in
       let strty2 = string_of_mono_type tyenv ty2 in
-      let strrng1 = Range.to_string rng1 in
-      let strrng2 = Range.to_string rng2 in
-      let (posmsg, strtyA, strtyB, additional) =
+      let (rng, strtyA, strtyB, additional) =
         match (Range.is_dummy rng1, Range.is_dummy rng2) with
-        | (true, true)   -> ("(cannot report position; '" ^ (Range.message rng1) ^ "', '" ^ (Range.message rng2) ^ "')", strty1, strty2, [])
-        | (true, false)  -> ("at " ^ strrng2 ^ ":", strty2, strty1, [])
-        | (false, true)  -> ("at " ^ strrng1 ^ ":", strty1, strty2, [])
-        | (false, false) -> ("at " ^ strrng1 ^ ":", strty1, strty2, [ NormalLine("This constraint is required by the expression");
-                                                                      NormalLine("at " ^ strrng2 ^ "."); ])
+        | (true, true)   -> (Range.dummy ("(cannot report position; '" ^ (Range.message rng1) ^ "', '" ^ (Range.message rng2) ^ "')"), strty1, strty2, [])
+        | (true, false)  -> (rng2, strty2, strty1, [])
+        | (false, true)  -> (rng1, strty1, strty2, [])
+        | (false, false) -> (rng1, strty1, strty2, [ NormalLine("This constraint is required by the expression");
+                                                                      NormalLine("at " ^ (Range.to_string rng2) ^ "."); ])
       in
-        report_error Typechecker (List.append [
-          NormalLine(posmsg);
+        report_error rng Typechecker (List.append [
           NormalLine("this expression has types");
           DisplayLine(strtyA);
           NormalLine("and");
@@ -937,15 +913,15 @@ let error_log_environment suspended =
 
   | Evaluator.EvalError(s)
   | Vm.ExecError(s)
-      -> report_error Evaluator [ NormalLine(s); ]
+      -> report_error (Range.dummy "") Evaluator [ NormalLine(s); ]
 
   | State.NotDuringPageBreak ->
-      report_error Evaluator [
+      report_error (Range.dummy "") Evaluator [
         NormalLine("a primitive as to PDF annotation was called before page breaking starts.");
       ]
 
   | Sys_error(s) ->
-      report_error System [ NormalLine(s); ]
+      report_error (Range.dummy "") System [ NormalLine(s); ]
 
 
 let arg_version () =
@@ -1015,6 +991,7 @@ let arg_spec_list curdir =
     ("--show-fonts"      , Arg.Unit(OptionState.set_show_fonts)      , " Displays all the available fonts"                      );
     ("-C"                , Arg.String(arg_config)                    , " Add colon-separated paths to configuration search path");
     ("--config"          , Arg.String(arg_config)                    , " Add colon-separated paths to configuration search path");
+    ("--message-format-json", Arg.Unit(OptionState.set_message_format_json) , " JSON ");
   ]
 
 
@@ -1048,8 +1025,7 @@ let setup_root_dirs () =
   | _ :: _ -> Config.initialize ds
 
 
-let () =
-  error_log_environment (fun () ->
+let main () =
     let curdir = Sys.getcwd () in
     Arg.parse (arg_spec_list curdir) (handle_anonymous_arg curdir) "";
     setup_root_dirs ();
@@ -1121,4 +1097,7 @@ let () =
           match docopt with
           | None         -> assert false
           | Some(astdoc) -> eval_abstract_tree_list env (Alist.to_list astacc) astdoc abspath_in abspath_out abspath_dump
-  )
+
+
+let () =
+  error_log_environment main report_error_stdout

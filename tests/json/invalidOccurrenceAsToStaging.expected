@@ -1,0 +1,9 @@
+{
+  "file": "invalidoccurrenceastostaging.satyh",
+  "range": {
+    "start": { "line": 1, "character": 14 },
+    "end": { "line": 1, "character": 15 }
+  },
+  "message":
+    "! [Type Error] invalid occurrence of variable 'x' as to stage;\n    should be used at stage 1."
+}
