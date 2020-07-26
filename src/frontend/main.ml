@@ -233,7 +233,8 @@ let register_document_file (dg : file_info FileDependencyGraph.t) (abspath_in : 
   Logging.begin_to_parse_file abspath_in;
   let file_in = open_in_abs abspath_in in
   let curdir = Filename.dirname (get_abs_path_string abspath_in) in
-  let (stage, header, utast) = ParserInterface.process (Filename.basename (get_abs_path_string abspath_in)) (Lexing.from_channel file_in) in
+  let fname = if OptionState.error_format_json () then get_abs_path_string abspath_in else Filename.basename (get_abs_path_string abspath_in) in
+  let (stage, header, utast) = ParserInterface.process fname (Lexing.from_channel file_in) in
   begin
     match stage with
     | Stage1               -> ()
